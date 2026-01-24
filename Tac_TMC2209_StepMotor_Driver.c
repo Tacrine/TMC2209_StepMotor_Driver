@@ -235,23 +235,6 @@ void Motor_Backward_Angle(Tac_StepMotor *motor_struct, float angle, uint8_t micr
 }
 
 
-
-
-
-
-        #ifdef _MSPM0G3507_
-
-        #endif
-        #ifdef USE_HAL_DRIVER
-        
-        #endif
-
-
-
-
-
-
-
 /// @brief 立即发生脉冲信号
 /// @param motor_struct 所需要控制电机的配置结构体
 /// @param freq 所需运动的频率(TMC2209按步驱动，一个脉冲电机就运动一步，频率越高，速度越快)
