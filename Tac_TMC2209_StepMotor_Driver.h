@@ -5,7 +5,7 @@
 说明：
     跨平台：本驱动程序使用TMC2209驱动芯片以驱动42步进电机,支持跨平台调用，STM32 HAL和MSP430 G3507平台。
     使用需要设置编译器预定义宏:
-        _MSPM0G3507_ 或者 USE_HAL_DRIVER
+        __MSPM0G3507__ 或者 USE_HAL_DRIVER
     脉冲发生：本驱动有多个实现脉冲的方式，用户可以根据自己的需求选择。目前只支持_TMC_GPIO_模式，_TMC_TIMER_模式还未实现。
     使用需要设置编译器预定义宏:
         _TMC_GPIO_ 或者 _TMC_TIMER_ 
@@ -36,7 +36,7 @@
 
 
 // 引入TI G3507的头文件
-#ifdef _MSPM0G3507_
+#ifdef __MSPM0G3507__
 #include "ti/driverlib/dl_gpio.h"
 #include "ti/driverlib/m0p/dl_interrupt.h"
 #include "ti_msp_dl_config.h"

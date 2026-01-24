@@ -2,7 +2,7 @@
 
 //脉冲发生器相关变量定义
 
-#ifdef _MSPM0G3507_
+#ifdef __MSPM0G3507__
 void Tac_StepMotor_Init(Tac_StepMotor *motor_struct, 
                         GPIO_Regs *DirPort, uint32_t DirPin, 
                         GPIO_Regs *MicrostepPort_A, uint32_t MicrostepPin_A, 
@@ -58,7 +58,7 @@ void set_Motor_Dir(Tac_StepMotor *motor_struct,unsigned char dir)
 {
     if(dir == 'F')
     {
-        #ifdef _MSPM0G3507_
+        #ifdef __MSPM0G3507__
             DL_GPIO_setPins(motor_struct->DirPort, motor_struct->DirPin);
         #endif
         #ifdef USE_HAL_DRIVER
@@ -68,7 +68,7 @@ void set_Motor_Dir(Tac_StepMotor *motor_struct,unsigned char dir)
     }
     else if(dir == 'B')
     {
-        #ifdef _MSPM0G3507_
+        #ifdef __MSPM0G3507__
             DL_GPIO_clearPins(motor_struct->DirPort, motor_struct->DirPin);
         #endif
         #ifdef USE_HAL_DRIVER
@@ -84,7 +84,7 @@ void set_Microsteps(Tac_StepMotor *motor_struct, uint8_t microsteps)
     // 根据细分设置TMC2209的MSA和MSB引脚
     if (microsteps == 64)
     {
-        #ifdef _MSPM0G3507_
+        #ifdef __MSPM0G3507__
             DL_GPIO_clearPins(motor_struct->MicrostepPort_A, motor_struct->MicrostepPin_A);
             DL_GPIO_setPins(motor_struct->MicrostepPort_B, motor_struct->MicrostepPin_B);
         #endif
@@ -96,7 +96,7 @@ void set_Microsteps(Tac_StepMotor *motor_struct, uint8_t microsteps)
     }
     else if (microsteps == 32)
     {
-        #ifdef _MSPM0G3507_
+        #ifdef __MSPM0G3507__
             DL_GPIO_setPins(motor_struct->MicrostepPort_A, motor_struct->MicrostepPin_A);
             DL_GPIO_clearPins(motor_struct->MicrostepPort_B, motor_struct->MicrostepPin_B);
         #endif
@@ -108,7 +108,7 @@ void set_Microsteps(Tac_StepMotor *motor_struct, uint8_t microsteps)
     }
     else if (microsteps == 16)
     {
-        #ifdef _MSPM0G3507_
+        #ifdef __MSPM0G3507__
             DL_GPIO_setPins(motor_struct->MicrostepPort_A, motor_struct->MicrostepPin_A);
             DL_GPIO_setPins(motor_struct->MicrostepPort_B, motor_struct->MicrostepPin_B);
         #endif
@@ -120,7 +120,7 @@ void set_Microsteps(Tac_StepMotor *motor_struct, uint8_t microsteps)
     }
     else if (microsteps == 8)
     {
-        #ifdef _MSPM0G3507_        
+        #ifdef __MSPM0G3507__        
             DL_GPIO_clearPins(motor_struct->MicrostepPort_A, motor_struct->MicrostepPin_A);
             DL_GPIO_clearPins(motor_struct->MicrostepPort_B, motor_struct->MicrostepPin_B);        
         #endif
@@ -142,7 +142,7 @@ void set_Motor_Steps(Tac_StepMotor *motor_struct, uint16_t steps)
 //TMC2209的锁定功能，长时间锁定会造成电机发热
 void Motor_Lock(Tac_StepMotor *motor_struct)
 {
-    #ifdef _MSPM0G3507_
+    #ifdef __MSPM0G3507__
         DL_GPIO_clearPins(motor_struct->LockPort, motor_struct->LockPin);
     #endif
     #ifdef USE_HAL_DRIVER
@@ -154,7 +154,7 @@ void Motor_Lock(Tac_StepMotor *motor_struct)
 // 解锁步进电机
 void Motor_Unlock(Tac_StepMotor *motor_struct)
 {
-    #ifdef _MSPM0G3507_
+    #ifdef __MSPM0G3507__
         DL_GPIO_setPins(motor_struct->LockPort, motor_struct->LockPin);
     #endif
     #ifdef USE_HAL_DRIVER
@@ -299,7 +299,7 @@ void enable_PWM(Tac_StepMotor *motor_struct, uint32_t freq)
 
 
 /*以下内容为脉冲发生器部分*/
-#ifdef _MSPM0G3507_
+#ifdef __MSPM0G3507__
 
 #endif
 #ifdef USE_HAL_DRIVER
