@@ -290,14 +290,21 @@ void Motor_Backward_Angle(Tac_StepMotor *motor_struct, float angle, uint8_t micr
 void enable_PWM(Tac_StepMotor *motor_struct, uint32_t freq)
 {
     motor_struct->ticks = 0;
-    SQW_Set_Frequency(motor_struct, motor_struct->htim, freq);
+    SQW_Set_Frequency(motor_struct, freq);
     motor_struct->SQW_Generator_En = '1';
-
+    while(motor_struct->Steps_remain > 1)     // 循环到步数耗尽，多留一步防止数据溢出
+    {}
+    SQW_Gen_Stop(motor_struct);
 }
 
 
+/*以下内容为脉冲发生器部分*/
+#ifdef _MSPM0G3507_
+
+#endif
 #ifdef USE_HAL_DRIVER
-/// @brief 停止所有的脉冲信号
+/// @brief 停止脉冲信号
+/// @param motor_struct 所需要控制电机的配置结构体
 void SQW_Gen_Stop(Tac_StepMotor *motor_struct)
 {
     motor_struct->SQW_Generator_En = '0';
@@ -352,9 +359,9 @@ float Get_TIM_Update_Freq(TIM_HandleTypeDef *htim)
 /// @param htim 定时器句柄
 /// @param motor_struct 所需要控制电机的配置结构体 
 /// @param freq_out 输出的频率
-void SQW_Set_Frequency(Tac_StepMotor *motor_struct ,TIM_HandleTypeDef *htim, float freq_out)
+void SQW_Set_Frequency(Tac_StepMotor *motor_struct , float freq_out)
 {
-    float f_int = Get_TIM_Update_Freq(htim);
+    float f_int = Get_TIM_Update_Freq(motor_struct->htim);
 
     motor_struct->SQW_tick_target = (uint32_t)(f_int / (2.0f * freq_out));
 

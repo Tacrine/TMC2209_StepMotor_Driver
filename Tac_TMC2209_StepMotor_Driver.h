@@ -59,12 +59,16 @@ typedef struct
     GPIO_Regs *SQW_Port;
 
     // 步进电机运动状态设置
-    uint32_t Steps_remain;              // 电机需要运动的步数
+    uint32_t Steps_remain;                   // 电机需要运动的步数
     uint8_t Microsteps;                 // 细分
     unsigned char Dir;                  // 方向,T为顺时针，F为逆时针(从电机运动轴的上面看)
     unsigned char Lock;                 // 锁定状态，T为锁定，F为未锁定
-    uint16_t Freq;                      // 脉冲频率（Hz）
+
+    TIM_HandleTypeDef *htim;            // 定时器句柄
+    uint16_t Freq;                      // 脉冲频率(Hz)
     unsigned char SQW_Generator_En;     // 脉冲输出使能
+    uint32_t ticks;                     // 定时器时刻，用以计算脉冲周期
+    uint32_t SQW_tick_target;           // 脉冲周期目标值
 } Tac_StepMotor;
 
 // 初始化函数
@@ -141,7 +145,7 @@ void Motor_Backward_Angle(Tac_StepMotor *motor_struct, float angle, uint8_t micr
 void enable_PWM(Tac_StepMotor *motor_struct, uint32_t freq);
 void SQW_Gen(Tac_StepMotor *motor_struct);
 void SQW_Gen_Stop(Tac_StepMotor *motor_struct);
-void SQW_Set_Frequency(Tac_StepMotor *motor_struct ,TIM_HandleTypeDef *htim, float freq_out);
+void SQW_Set_Frequency(Tac_StepMotor *motor_struct, float freq_out);
 
 
 #endif // _Tac_TMC2209_StepMotor_Driver_h_
