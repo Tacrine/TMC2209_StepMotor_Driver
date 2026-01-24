@@ -124,6 +124,8 @@ void Tac_StepMotor_Init(Tac_StepMotor *motor_struct, TIM_HandleTypeDef *htim,
                         GPIO_TypeDef *microstep_port_B, uint16_t microstep_pin_B, 
                         GPIO_TypeDef *lock_port, uint16_t lock_pin,
                         GPIO_TypeDef *SQW_port, uint16_t SQW_pin);
+
+
 #endif
 
 
@@ -145,7 +147,7 @@ void Motor_Backward_Angle(Tac_StepMotor *motor_struct, float angle, uint8_t micr
 void enable_PWM(Tac_StepMotor *motor_struct, uint32_t freq);
 void SQW_Gen(Tac_StepMotor *motor_struct);
 void SQW_Gen_Stop(Tac_StepMotor *motor_struct);
-void SQW_Set_Frequency(Tac_StepMotor *motor_struct, float freq_out);
 
+void SQW_Set_Frequency(Tac_StepMotor *motor_struct, float freq_out);    //HAL库获取定时器时钟频率，并设置脉冲频率
 
 #endif // _Tac_TMC2209_StepMotor_Driver_h_
