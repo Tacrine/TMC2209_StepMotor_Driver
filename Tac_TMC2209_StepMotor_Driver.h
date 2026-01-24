@@ -10,6 +10,7 @@
     使用需要设置编译器预定义宏:
         _TMC_GPIO_ 或者 _TMC_TIMER_ 
         _TMC_GPIO_模式：使用定时器中断来翻转引脚电平，需要在中断函数中调用，下文是示例。
+                    ST_HAL：
                         extern Tac_StepMotor Step_Motor_X;                      // 先引入步进电机结构体
                         extern Tac_StepMotor Step_Motor_Y;
                         HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
@@ -20,6 +21,22 @@
                                 SQW_Gen(&motor_struct_Y);
                             }
                         }
+                    TIMSPM0G3507:
+                        extern Tac_StepMotor Step_Motor_X;                      // 先引入步进电机结构体
+                        extern Tac_StepMotor Step_Motor_Y;
+                        void TIMER_0_INST_IRQHandler(void)                      // 选择使用的定时器  
+                        {
+                            switch (DL_TimerA_getPendingInterrupt(TIMER_0_INST))
+                            {
+                                case DL_TIMERA_IIDX_REPEAT_COUNT:
+                                    SQW_Gen(&motor_struct_X);
+                                    SQW_Gen(&motor_struct_Y);
+                                    break;
+                                default:                                    // 其他中断不处理
+                                    break;
+                            }
+                        }
+
         _TMC_TIMER_模式：直接使用定时器来产生脉冲。
 */
 
@@ -64,7 +81,7 @@ typedef struct
     unsigned char Dir;                  // 方向,T为顺时针，F为逆时针(从电机运动轴的上面看)
     unsigned char Lock;                 // 锁定状态，T为锁定，F为未锁定
 
-    TIM_HandleTypeDef *htim;            // 定时器句柄
+    IRQn_Type htim;                     // 定时器中断句柄
     uint16_t Freq;                      // 脉冲频率(Hz)
     unsigned char SQW_Generator_En;     // 脉冲输出使能
     uint32_t ticks;                     // 定时器时刻，用以计算脉冲周期

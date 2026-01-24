@@ -300,7 +300,18 @@ void enable_PWM(Tac_StepMotor *motor_struct, uint32_t freq)
 
 
 /*以下内容为脉冲发生器部分*/
+
+
+/// @brief 停止脉冲信号
+/// @param motor_struct 所需要控制电机的配置结构体
+void SQW_Gen_Stop(Tac_StepMotor *motor_struct)
+{
+    motor_struct->SQW_Generator_En = '0';
+}
+
+
 #ifdef __MSPM0G3507__
+
 
 /// @brief 根据目标频率自动计算所需要的tick数量
 /// @param htim 定时器句柄
@@ -318,12 +329,7 @@ void SQW_Set_Frequency(Tac_StepMotor *motor_struct , float freq_out)
 
 #endif
 
-/// @brief 停止脉冲信号
-/// @param motor_struct 所需要控制电机的配置结构体
-void SQW_Gen_Stop(Tac_StepMotor *motor_struct)
-{
-    motor_struct->SQW_Generator_En = '0';
-}
+
 
 #ifdef USE_HAL_DRIVER
 /// @brief 获取当前定时器APB值，用以计算周期等
