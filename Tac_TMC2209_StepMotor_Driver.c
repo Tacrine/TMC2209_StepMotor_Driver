@@ -1,4 +1,6 @@
 #include "Tac_TMC2209_StepMotor_Driver.h"
+
+//脉冲发生器相关变量定义
 unsigned char SQW_Generator_En;  // 脉冲输出使能
 uint32_t tick_count = 0;
 
@@ -277,5 +279,6 @@ void SQW_Gen_Ticks(void)
 
 void SQW_Gen_Stop(void)
 {
+    tick_count = 0;
     SQW_Generator_En = '0';
 }

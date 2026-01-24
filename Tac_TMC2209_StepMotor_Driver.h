@@ -9,11 +9,13 @@
     脉冲发生：本驱动有多个实现脉冲的方式，用户可以根据自己的需求选择。目前只支持_TMC_GPIO_模式，_TMC_TIMER_模式还未实现。
     使用需要设置编译器预定义宏:
         _TMC_GPIO_ 或者 _TMC_TIMER_ 
-        _TMC_GPIO_模式：使用定时器中断来翻转引脚电平，需要在中断函数中调用，下文是实例。
+        _TMC_GPIO_模式：使用定时器中断来翻转引脚电平，需要在中断函数中调用，下文是示例。
                         HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
                         {
                             if (htim == (&htim6))  // 选择使用的定时器
-
+                            {
+                                SQW_Gen_Ticks();
+                            }
                         }
         _TMC_TIMER_模式：直接使用定时器来产生脉冲。
 */
@@ -24,8 +26,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+//脉冲发生器相关变量定义
 extern unsigned char SQW_Generator_En;  // 脉冲输出使能
-extern uint32_t tick_count = 0;        // 脉冲个数计数
+extern uint32_t tick_count;        // 脉冲个数计数
+
+
 
 // 引入TI G3507的头文件
 #ifdef _MSPM0G3507_
@@ -62,6 +67,7 @@ typedef struct
 #include "main.h"
 #include "stm32f1xx_hal.h"
 #include "stm32f1xx_hal_tim.h"
+
 // 步进电机参数定义
 typedef struct
 {
