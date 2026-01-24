@@ -10,11 +10,14 @@
     使用需要设置编译器预定义宏:
         _TMC_GPIO_ 或者 _TMC_TIMER_ 
         _TMC_GPIO_模式：使用定时器中断来翻转引脚电平，需要在中断函数中调用，下文是示例。
+                        extern Tac_StepMotor Step_Motor_X;                      // 先引入步进电机结构体
+                        extern Tac_StepMotor Step_Motor_Y;
                         HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
                         {
-                            if (htim == (&htim6))  // 选择使用的定时器
+                            if (htim == (&htim6))                               // 选择使用的定时器
                             {
-                                SQW_Gen();
+                                SQW_Gen(&motor_struct_X);
+                                SQW_Gen(&motor_struct_Y);
                             }
                         }
         _TMC_TIMER_模式：直接使用定时器来产生脉冲。
@@ -56,7 +59,7 @@ typedef struct
     GPIO_Regs *SQW_Port;
 
     // 步进电机运动状态设置
-    int Steps_remain;                   // 电机需要运动的步数
+    uint32_t Steps_remain;              // 电机需要运动的步数
     uint8_t Microsteps;                 // 细分
     unsigned char Dir;                  // 方向,T为顺时针，F为逆时针(从电机运动轴的上面看)
     unsigned char Lock;                 // 锁定状态，T为锁定，F为未锁定
@@ -97,17 +100,26 @@ typedef struct
     GPIO_TypeDef *SQW_Port;
 
     // 步进电机运动状态设置
-    int Steps_remain;                   // 电机需要运动的步数
+    uint32_t Steps_remain;                   // 电机需要运动的步数
     uint8_t Microsteps;                 // 细分
     unsigned char Dir;                  // 方向,T为顺时针，F为逆时针(从电机运动轴的上面看)
     unsigned char Lock;                 // 锁定状态，T为锁定，F为未锁定
+
+    TIM_HandleTypeDef *htim;            // 定时器句柄
     uint16_t Freq;                      // 脉冲频率(Hz)
     unsigned char SQW_Generator_En;     // 脉冲输出使能
+    uint32_t ticks;                     // 定时器时刻，用以计算脉冲周期
+    uint32_t SQW_tick_target;           // 脉冲周期目标值
 
 } Tac_StepMotor;
 
 // 初始化函数
-void Tac_StepMotor_Init(Tac_StepMotor *motor_struct, GPIO_TypeDef *dir_port, uint16_t dir_pin, GPIO_TypeDef *microstep_port_A, uint16_t microstep_pin_A, GPIO_TypeDef *microstep_port_B, uint16_t microstep_pin_B, GPIO_TypeDef *lock_port, uint16_t lock_pin, GPIO_TypeDef *SQW_port, uint16_t SQW_pin);
+void Tac_StepMotor_Init(Tac_StepMotor *motor_struct, TIM_HandleTypeDef *htim,
+                        GPIO_TypeDef *dir_port, uint16_t dir_pin, 
+                        GPIO_TypeDef *microstep_port_A, uint16_t microstep_pin_A, 
+                        GPIO_TypeDef *microstep_port_B, uint16_t microstep_pin_B, 
+                        GPIO_TypeDef *lock_port, uint16_t lock_pin,
+                        GPIO_TypeDef *SQW_port, uint16_t SQW_pin);
 #endif
 
 
@@ -127,9 +139,9 @@ void Motor_Forward_Angle(Tac_StepMotor *motor_struct, float angle, uint8_t micro
 void Motor_Backward_Angle(Tac_StepMotor *motor_struct, float angle, uint8_t microsteps, unsigned char lock_after_move, uint32_t freq);
 
 void enable_PWM(Tac_StepMotor *motor_struct, uint32_t freq);
-
 void SQW_Gen(Tac_StepMotor *motor_struct);
-
 void SQW_Gen_Stop(Tac_StepMotor *motor_struct);
+void SQW_Set_Frequency(Tac_StepMotor *motor_struct ,TIM_HandleTypeDef *htim, float freq_out);
+
 
 #endif // _Tac_TMC2209_StepMotor_Driver_h_

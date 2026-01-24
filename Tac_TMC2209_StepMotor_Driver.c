@@ -1,10 +1,6 @@
 #include "Tac_TMC2209_StepMotor_Driver.h"
 
 //脉冲发生器相关变量定义
-static uint32_t tick_count_target = 0;      // 脉冲计数目标值
-static uint32_t tick_count = 0;             // 脉冲计数值
-static uint32_t ticks = 0;                  // 定时器时刻计数，用以计算脉冲周期
-static uint32_t SQW_tick_target = 0;        // 脉冲周期目标值
 
 #ifdef _MSPM0G3507_
 void Tac_StepMotor_Init(Tac_StepMotor *motor_struct, 
@@ -24,11 +20,22 @@ void Tac_StepMotor_Init(Tac_StepMotor *motor_struct,
     motor_struct->LockPin = LockPin;
     motor_struct->SQW_Port = SQW_Port;
     motor_struct->SQW_Pin = SQW_Pin;
+    motor_struct->Lock = 'F';
+    motor_struct->ticks = 0;
+    motor_struct->SQW_tick_target = 0;
 }
 #endif
 #ifdef USE_HAL_DRIVER
 // 这里的GPIO_TypeDef * 类型是HAL库中的类型
-void Tac_StepMotor_Init(Tac_StepMotor *motor_struct, GPIO_TypeDef *dir_port, uint16_t dir_pin, GPIO_TypeDef *microstep_port_A, uint16_t microstep_pin_A, GPIO_TypeDef *microstep_port_B, uint16_t microstep_pin_B, GPIO_TypeDef *lock_port, uint16_t lock_pin, GPIO_TypeDef *SQW_port, uint16_t SQW_pin) {     
+void Tac_StepMotor_Init(Tac_StepMotor *motor_struct, TIM_HandleTypeDef *htim,
+                        GPIO_TypeDef *dir_port, uint16_t dir_pin, 
+                        GPIO_TypeDef *microstep_port_A, uint16_t microstep_pin_A, 
+                        GPIO_TypeDef *microstep_port_B, uint16_t microstep_pin_B, 
+                        GPIO_TypeDef *lock_port, uint16_t lock_pin, 
+                        GPIO_TypeDef *SQW_port, 
+                        uint16_t SQW_pin) 
+{   
+    motor_struct->htim = htim;  
     motor_struct->DirPort = dir_port;     
     motor_struct->DirPin = dir_pin;     
     motor_struct->MicrostepPort_A = microstep_port_A;     
@@ -39,8 +46,10 @@ void Tac_StepMotor_Init(Tac_StepMotor *motor_struct, GPIO_TypeDef *dir_port, uin
     motor_struct->LockPin = lock_pin;     
     motor_struct->SQW_Port = SQW_port;     
     motor_struct->SQW_Pin = SQW_pin; 
+    motor_struct->Lock = 'F';
+    motor_struct->ticks = 0;
+    motor_struct->SQW_tick_target = 0;
 }
-
 #endif
 
 
@@ -280,28 +289,32 @@ void Motor_Backward_Angle(Tac_StepMotor *motor_struct, float angle, uint8_t micr
 /// @param freq 所需运动的频率(TMC2209按步驱动，一个脉冲电机就运动一步，频率越高，速度越快)
 void enable_PWM(Tac_StepMotor *motor_struct, uint32_t freq)
 {
-    tick_count = 0;
-    ticks = 0;
-    tick_count_target = motor_struct->Steps_remain;
+    motor_struct->ticks = 0;
+    SQW_Set_Frequency(motor_struct, motor_struct->htim, freq);
     motor_struct->SQW_Generator_En = '1';
+
 }
 
+
+#ifdef USE_HAL_DRIVER
 /// @brief 停止所有的脉冲信号
 void SQW_Gen_Stop(Tac_StepMotor *motor_struct)
 {
-    tick_count = 0;
     motor_struct->SQW_Generator_En = '0';
 }
 
-//自动获取定时器时钟（TIMCLK）
+
+/// @brief 获取当前定时器APB值，用以计算周期等
+/// @param htim 定时器句柄
+/// @return 定时器周期
 uint32_t Get_TIM_Clock(TIM_HandleTypeDef *htim)
 {
     uint32_t pclk, ppre, timclk;
 
     // 判断定时器属于 APB2 还是 APB1 
-    if (htim->Instance == TIM1  )/*|| htim->Instance == TIM8  ||
-        htim->Instance == TIM15 || htim->Instance == TIM16 ||
-        htim->Instance == TIM17)*/
+    if (htim->Instance == TIM1 )  /* || htim->Instance == TIM8  ||
+        htim->Instance == TIM15 || htim->Instance == TIM16 ||                   //这里报错的话则需要手动确认定时器
+        htim->Instance == TIM17) */
     {
         /* APB2 定时器 */
         pclk = HAL_RCC_GetPCLK2Freq();
@@ -335,33 +348,40 @@ float Get_TIM_Update_Freq(TIM_HandleTypeDef *htim)
 }
 
 
-//根据目标频率自动计算 tick_count
-void SQW_Set_Frequency(TIM_HandleTypeDef *htim, float freq_out)
+/// @brief 根据目标频率自动计算所需要的tick数量
+/// @param htim 定时器句柄
+/// @param motor_struct 所需要控制电机的配置结构体 
+/// @param freq_out 输出的频率
+void SQW_Set_Frequency(Tac_StepMotor *motor_struct ,TIM_HandleTypeDef *htim, float freq_out)
 {
     float f_int = Get_TIM_Update_Freq(htim);
 
-    SQW_tick_target = (uint32_t)(f_int / (2.0f * freq_out));
+    motor_struct->SQW_tick_target = (uint32_t)(f_int / (2.0f * freq_out));
 
-    if (SQW_tick_target < 1)
-        SQW_tick_target = 1;   // 防止除零
+    if (motor_struct->SQW_tick_target < 1)
+        motor_struct->SQW_tick_target = 1;   // 防止除零
 }
 
+
+/// @brief 方波输出，需要将该函数放入中断回调中去
+/// @param motor_struct 所需要控制电机的配置结构体
 void SQW_Gen(Tac_StepMotor *motor_struct)
 {
     if(motor_struct->SQW_Generator_En == '1')
     {
-        ticks++;
-        if (tick_count >= SQW_tick_target)
+        motor_struct->ticks++;
+        if (motor_struct->ticks >= motor_struct->SQW_tick_target)
         {
             #ifdef USE_HAL_DRIVER
-                HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5); // 输出方波
+                HAL_GPIO_TogglePin(motor_struct->SQW_Port, motor_struct->SQW_Pin); // 输出方波
             #endif
-            tick_count ++;
-            ticks = 0;
+            motor_struct->Steps_remain--;
+            motor_struct->ticks = 0;
         }
-        else if (tick_count >= tick_count_target)
+        if (motor_struct->Steps_remain <= ((uint8_t)1))  //留出多余步数，防止溢出，原本应该为0
         {
             SQW_Gen_Stop(motor_struct);
         }
     }
 }
+#endif
