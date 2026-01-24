@@ -1,8 +1,48 @@
 #include "Tac_TMC2209_StepMotor_Driver.h"
 
 //脉冲发生器相关变量定义
-unsigned char SQW_Generator_En;  // 脉冲输出使能
-uint32_t tick_count = 0;
+static uint32_t tick_count_target = 0;      // 脉冲计数目标值
+static uint32_t tick_count = 0;             // 脉冲计数值
+static uint32_t ticks = 0;                  // 定时器时刻计数，用以计算脉冲周期
+static uint32_t SQW_tick_target = 0;        // 脉冲周期目标值
+
+#ifdef _MSPM0G3507_
+void Tac_StepMotor_Init(Tac_StepMotor *motor_struct, 
+                        GPIO_Regs *DirPort, uint32_t DirPin, 
+                        GPIO_Regs *MicrostepPort_A, uint32_t MicrostepPin_A, 
+                        GPIO_Regs *MicrostepPort_B, uint32_t MicrostepPin_B, 
+                        GPIO_Regs *LockPort, uint32_t LockPin, 
+                        GPIO_Regs *SQW_Port, uint32_t SQW_Pin)
+{
+    motor_struct->DirPort = DirPort;
+    motor_struct->DirPin = DirPin;
+    motor_struct->MicrostepPort_A = MicrostepPort_A;
+    motor_struct->MicrostepPin_A = MicrostepPin_A;
+    motor_struct->MicrostepPort_B = MicrostepPort_B;
+    motor_struct->MicrostepPin_B = MicrostepPin_B;
+    motor_struct->LockPort = LockPort;
+    motor_struct->LockPin = LockPin;
+    motor_struct->SQW_Port = SQW_Port;
+    motor_struct->SQW_Pin = SQW_Pin;
+}
+#endif
+#ifdef USE_HAL_DRIVER
+// 这里的GPIO_TypeDef * 类型是HAL库中的类型
+void Tac_StepMotor_Init(Tac_StepMotor *motor_struct, GPIO_TypeDef *dir_port, uint16_t dir_pin, GPIO_TypeDef *microstep_port_A, uint16_t microstep_pin_A, GPIO_TypeDef *microstep_port_B, uint16_t microstep_pin_B, GPIO_TypeDef *lock_port, uint16_t lock_pin, GPIO_TypeDef *SQW_port, uint16_t SQW_pin) {     
+    motor_struct->DirPort = dir_port;     
+    motor_struct->DirPin = dir_pin;     
+    motor_struct->MicrostepPort_A = microstep_port_A;     
+    motor_struct->MicrostepPin_A = microstep_pin_A;     
+    motor_struct->MicrostepPort_B = microstep_port_B;     
+    motor_struct->MicrostepPin_B = microstep_pin_B;     
+    motor_struct->LockPort = lock_port;     
+    motor_struct->LockPin = lock_pin;     
+    motor_struct->SQW_Port = SQW_port;     
+    motor_struct->SQW_Pin = SQW_pin; 
+}
+
+#endif
+
 
 // 设置电机方向
 void set_Motor_Dir(Tac_StepMotor *motor_struct,unsigned char dir)
@@ -220,7 +260,7 @@ void Motor_Backward_Angle(Tac_StepMotor *motor_struct, float angle, uint8_t micr
     // 设置电机细分
     set_Microsteps(motor_struct, microsteps);
     // 计算电机运动步数
-    uint16_t steps = Caculate_Steps(motor_struct, angle);
+    uint32_t steps = Caculate_Steps(motor_struct, angle);
     set_Motor_Steps(motor_struct, steps);
     // 解锁电机
     Motor_Unlock(motor_struct);
@@ -240,28 +280,88 @@ void Motor_Backward_Angle(Tac_StepMotor *motor_struct, float angle, uint8_t micr
 /// @param freq 所需运动的频率(TMC2209按步驱动，一个脉冲电机就运动一步，频率越高，速度越快)
 void enable_PWM(Tac_StepMotor *motor_struct, uint32_t freq)
 {
-    SQW_Generator_En = '1';
+    tick_count = 0;
+    ticks = 0;
+    tick_count_target = motor_struct->Steps_remain;
+    motor_struct->SQW_Generator_En = '1';
 }
 
-void SQW_Gen_Ticks(void)
-{
-    #ifdef _MSPM0G3507_
-        #ifdef _TMC_GPIO_
-
-        #endif
-    #endif
-    #ifdef USE_HAL_DRIVER
-        #ifdef _TMC_GPIO_
-            if(SQW_Generator_En == '1')
-            {
-                
-            }
-        #endif
-    #endif
-}
-
-void SQW_Gen_Stop(void)
+/// @brief 停止所有的脉冲信号
+void SQW_Gen_Stop(Tac_StepMotor *motor_struct)
 {
     tick_count = 0;
-    SQW_Generator_En = '0';
+    motor_struct->SQW_Generator_En = '0';
+}
+
+//自动获取定时器时钟（TIMCLK）
+uint32_t Get_TIM_Clock(TIM_HandleTypeDef *htim)
+{
+    uint32_t pclk, ppre, timclk;
+
+    // 判断定时器属于 APB2 还是 APB1 
+    if (htim->Instance == TIM1  )/*|| htim->Instance == TIM8  ||
+        htim->Instance == TIM15 || htim->Instance == TIM16 ||
+        htim->Instance == TIM17)*/
+    {
+        /* APB2 定时器 */
+        pclk = HAL_RCC_GetPCLK2Freq();
+        ppre = (RCC->CFGR & RCC_CFGR_PPRE2) >> RCC_CFGR_PPRE2_Pos;
+    }
+    else
+    {
+        // APB1 定时器 
+        pclk = HAL_RCC_GetPCLK1Freq();
+        ppre = (RCC->CFGR & RCC_CFGR_PPRE1) >> RCC_CFGR_PPRE1_Pos;
+    }
+
+    // APB 预分频器 > 1 时，定时器时钟加倍 
+    if (ppre >= 4)   // 100b=div2, 101b=div4, 110b=div8, 111b=div16
+        timclk = pclk * 2;
+    else
+        timclk = pclk;
+
+    return timclk;
+}
+
+
+//自动计算定时器中断频率
+float Get_TIM_Update_Freq(TIM_HandleTypeDef *htim)
+{
+    uint32_t timclk = Get_TIM_Clock(htim);
+    uint32_t psc = htim->Instance->PSC;
+    uint32_t arr = htim->Instance->ARR;
+
+    return (float)timclk / ((psc + 1) * (arr + 1));
+}
+
+
+//根据目标频率自动计算 tick_count
+void SQW_Set_Frequency(TIM_HandleTypeDef *htim, float freq_out)
+{
+    float f_int = Get_TIM_Update_Freq(htim);
+
+    SQW_tick_target = (uint32_t)(f_int / (2.0f * freq_out));
+
+    if (SQW_tick_target < 1)
+        SQW_tick_target = 1;   // 防止除零
+}
+
+void SQW_Gen(Tac_StepMotor *motor_struct)
+{
+    if(motor_struct->SQW_Generator_En == '1')
+    {
+        ticks++;
+        if (tick_count >= SQW_tick_target)
+        {
+            #ifdef USE_HAL_DRIVER
+                HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5); // 输出方波
+            #endif
+            tick_count ++;
+            ticks = 0;
+        }
+        else if (tick_count >= tick_count_target)
+        {
+            SQW_Gen_Stop(motor_struct);
+        }
+    }
 }
