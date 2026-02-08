@@ -3,14 +3,13 @@
 //脉冲发生器相关变量定义
 
 #ifdef __MSPM0G3507__
-void Tac_StepMotor_Init(Tac_StepMotor *motor_struct, 
-                        GPIO_Regs *DirPort, uint32_t DirPin, 
-                        GPIO_Regs *MicrostepPort_A, uint32_t MicrostepPin_A, 
-                        GPIO_Regs *MicrostepPort_B, uint32_t MicrostepPin_B, 
-                        GPIO_Regs *LockPort, uint32_t LockPin, 
+void Tac_StepMotor_Init(Tac_StepMotor *motor_struct, DL_Tac_StepMotor_TimerConfig *timer_config,
+                        GPIO_Regs *DirPort, uint32_t DirPin,
+                        GPIO_Regs *MicrostepPort_A, uint32_t MicrostepPin_A,
+                        GPIO_Regs *MicrostepPort_B, uint32_t MicrostepPin_B,
+                        GPIO_Regs *LockPort, uint32_t LockPin,
                         GPIO_Regs *SQW_Port, uint32_t SQW_Pin)
 {
-
     motor_struct->DirPort = DirPort;
     motor_struct->DirPin = DirPin;
     motor_struct->MicrostepPort_A = MicrostepPort_A;
@@ -27,7 +26,7 @@ void Tac_StepMotor_Init(Tac_StepMotor *motor_struct,
 }
 #endif
 #ifdef USE_HAL_DRIVER
-// 这里的GPIO_TypeDef * 类型是HAL库中的类型
+// 这里的GPIO_TypeDef * 是HAL库中的类型
 void Tac_StepMotor_Init(Tac_StepMotor *motor_struct, TIM_HandleTypeDef *htim,
                         GPIO_TypeDef *dir_port, uint16_t dir_pin, 
                         GPIO_TypeDef *microstep_port_A, uint16_t microstep_pin_A, 
@@ -311,6 +310,20 @@ void SQW_Gen_Stop(Tac_StepMotor *motor_struct)
 
 
 #ifdef __MSPM0G3507__
+uint32_t Get_Config_Clock(Tac_StepMotor *motor_struct)
+{
+    uint32_t DL_TIMER_CLOCK_BUSCLK = motor_struct->timer_config->clockSel;
+    return DL_TIMER_CLOCK_BUSCLK;
+}
+
+// 计算中断频率
+float Get_TIM_Update_Freq(Tac_StepMotor *motor_struct) 
+{
+    //DL_TimerA_getClockConfig(gptimer, config);  
+    //uint32_t DL_Timer_LoadValue = DL_TimerA_getLoadValue(gptimer);
+    uint32_t period = motor_struct->timer_config->period;
+    return period;
+}
 
 
 /// @brief 根据目标频率自动计算所需要的tick数量
@@ -319,12 +332,13 @@ void SQW_Gen_Stop(Tac_StepMotor *motor_struct)
 /// @param freq_out 输出的频率
 void SQW_Set_Frequency(Tac_StepMotor *motor_struct , float freq_out)
 {
-    float f_int = Get_TIM_Update_Freq(motor_struct->htim);
+    float f_int = Get_TIM_Update_Freq(motor_struct);
 
-    motor_struct->SQW_tick_target = (uint32_t)(f_int / (2.0f * freq_out));
+    motor_struct->SQW_tick_target = (uint32_t)(freq_out / f_int);
 
     if (motor_struct->SQW_tick_target < 1)
         motor_struct->SQW_tick_target = 1;   // 防止除零
+        
 }
 
 #endif
@@ -384,7 +398,7 @@ void SQW_Set_Frequency(Tac_StepMotor *motor_struct , float freq_out)
 {
     float f_int = Get_TIM_Update_Freq(motor_struct->htim);
 
-    motor_struct->SQW_tick_target = (uint32_t)(f_int / (2.0f * freq_out));
+    motor_struct->SQW_tick_target = (uint32_t)(freq_out / f_int);
 
     if (motor_struct->SQW_tick_target < 1)
         motor_struct->SQW_tick_target = 1;   // 防止除零

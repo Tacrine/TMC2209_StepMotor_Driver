@@ -7,9 +7,9 @@
     使用需要设置编译器预定义宏:
         __MSPM0G3507__ 或者 USE_HAL_DRIVER
     脉冲发生：本驱动有多个实现脉冲的方式，用户可以根据自己的需求选择。目前只支持_TMC_GPIO_模式，_TMC_TIMER_模式还未实现。
-    使用需要设置编译器预定义宏:
-        _TMC_GPIO_ 或者 _TMC_TIMER_ 
-        _TMC_GPIO_模式：使用定时器中断来翻转引脚电平，需要在中断函数中调用，下文是示例。
+    使用需要设置编译器预定义宏: _TMC_GPIO_ 或者 _TMC_TIMER_ 
+        _TMC_GPIO_模式：使用定时器中断来翻转引脚电平，需要在中断函数中调用，只适合与约1KHz左右的速度，高速会频繁进入中断，打乱MCU运行周期。
+        下文是示例。
                     ST_HAL：
                         extern Tac_StepMotor Step_Motor_X;                      // 先引入步进电机结构体
                         extern Tac_StepMotor Step_Motor_Y;
@@ -37,7 +37,7 @@
                             }
                         }
 
-        _TMC_TIMER_模式：直接使用定时器来产生脉冲。
+        _TMC_TIMER_模式：直接使用定时器来产生脉冲，STM32需要配置主从定时器。
 */
 
 #ifndef _Tac_TMC2209_StepMotor_Driver_h_
@@ -57,6 +57,15 @@
 #include "ti/driverlib/dl_gpio.h"
 #include "ti/driverlib/m0p/dl_interrupt.h"
 #include "ti_msp_dl_config.h"
+
+//TI G3507的时钟以及定时器配置结构体
+typedef struct
+{
+    DL_TIMER_CLOCK clockSel;
+    DL_TIMER_CLOCK_DIVIDE divideRatio;
+    uint8_t prescale;
+    uint32_t period;
+} DL_Tac_StepMotor_TimerConfig;
 
 // 步进电机参数定义
 typedef struct
@@ -81,7 +90,7 @@ typedef struct
     unsigned char Dir;                  // 方向,T为顺时针，F为逆时针(从电机运动轴的上面看)
     unsigned char Lock;                 // 锁定状态，T为锁定，F为未锁定
 
-    IRQn_Type htim;                     // 定时器中断句柄
+    DL_Tac_StepMotor_TimerConfig *timer_config; // 定时器配置结构体
     uint16_t Freq;                      // 脉冲频率(Hz)
     unsigned char SQW_Generator_En;     // 脉冲输出使能
     uint32_t ticks;                     // 定时器时刻，用以计算脉冲周期
@@ -89,11 +98,11 @@ typedef struct
 } Tac_StepMotor;
 
 // 初始化函数
-void Tac_StepMotor_Init(Tac_StepMotor *motor_struct, 
-                        GPIO_Regs *DirPort, uint32_t DirPin, 
-                        GPIO_Regs *MicrostepPort_A, uint32_t MicrostepPin_A, 
-                        GPIO_Regs *MicrostepPort_B, uint32_t MicrostepPin_B, 
-                        GPIO_Regs *LockPort, uint32_t LockPin, 
+void Tac_StepMotor_Init(Tac_StepMotor *motor_struct, DL_Tac_StepMotor_TimerConfig *timer_config,
+                        GPIO_Regs *DirPort, uint32_t DirPin,
+                        GPIO_Regs *MicrostepPort_A, uint32_t MicrostepPin_A,
+                        GPIO_Regs *MicrostepPort_B, uint32_t MicrostepPin_B,
+                        GPIO_Regs *LockPort, uint32_t LockPin,
                         GPIO_Regs *SQW_Port, uint32_t SQW_Pin);
 #endif
 
