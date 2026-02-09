@@ -405,7 +405,7 @@ void SQW_Set_Frequency(Tac_StepMotor *motor_struct , float freq_out)
 }
 
 
-/// @brief 方波输出，需要将该函数放入中断回调中去
+/// @brief 计算方波输出的函数，需要将该函数放入中断回调中去
 /// @param motor_struct 所需要控制电机的配置结构体
 void SQW_Gen(Tac_StepMotor *motor_struct)
 {
@@ -414,16 +414,16 @@ void SQW_Gen(Tac_StepMotor *motor_struct)
         motor_struct->ticks++;
         if (motor_struct->ticks >= motor_struct->SQW_tick_target)
         {
-            #ifdef USE_HAL_DRIVER
-                HAL_GPIO_TogglePin(motor_struct->SQW_Port, motor_struct->SQW_Pin); // 输出方波
-            #endif
+            HAL_GPIO_WritePin(motor_struct->SQW_Port, motor_struct->SQW_Pin, GPIO_PIN_SET); // 输出方波
             motor_struct->Steps_remain--;
             motor_struct->ticks = 0;
         }
-        if (motor_struct->Steps_remain <= ((uint8_t)1))  //留出多余步数，防止溢出，原本应该为0
+        else if (motor_struct->Steps_remain <= ((uint8_t)1))  //留出多余步数，防止溢出，原本应该为0
         {
             SQW_Gen_Stop(motor_struct);
         }
+        else
+            HAL_GPIO_WritePin(motor_struct->SQW_Port, motor_struct->SQW_Pin,GPIO_PIN_RESET);
     }
 }
 #endif
