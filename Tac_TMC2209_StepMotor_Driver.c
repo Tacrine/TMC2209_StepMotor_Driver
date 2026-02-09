@@ -441,6 +441,7 @@ void SQW_Gen(Tac_StepMotor *motor_struct)
         else if (motor_struct->Steps_remain <= ((uint8_t)1))  //留出多余步数，防止溢出，原本应该为0
         {
             SQW_Gen_Stop(motor_struct);
+            HAL_TIM_Base_Stop_IT(motor_struct->htim);
         }
         else
             HAL_GPIO_WritePin(motor_struct->SQW_Port, motor_struct->SQW_Pin,GPIO_PIN_RESET);
