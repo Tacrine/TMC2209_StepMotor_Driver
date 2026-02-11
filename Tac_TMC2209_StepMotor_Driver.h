@@ -1,14 +1,14 @@
 // 作者：Tacrine_F
 // 时间：26年2月
 // 版本：V0.1alpha 只通过编译，等待实际测试
-/*  
+/*
 说明：
     跨平台：本驱动程序使用TMC2209驱动芯片以驱动42步进电机,支持跨平台调用，STM32 HAL和MSP430 G3507平台。
     使用需要设置编译器预定义宏:
     一般来说工程生成完毕时，会有预定义宏，如果没有，请手动添加
         __MSPM0G3507__ 或者 USE_HAL_DRIVER
     脉冲发生：本驱动有多个实现脉冲的方式，用户可以根据自己的需求选择。目前只支持_TMC_GPIO_模式，_TMC_TIMER_模式还未实现。
-    使用需要设置编译器预定义宏: _TMC_GPIO_ 或者 _TMC_TIMER_ 
+    使用需要设置编译器预定义宏: _TMC_GPIO_ 或者 _TMC_TIMER_
         _TMC_GPIO_模式：使用定时器中断来翻转引脚电平，需要在中断函数中调用，只适合与约1KHz左右的速度，高速会频繁进入中断，打乱MCU运行周期。
         下文是示例。
                     ST_HAL：
@@ -25,7 +25,7 @@
                     TIMSPM0G3507:
                         extern Tac_StepMotor Step_Motor_X;                      // 先引入步进电机结构体
                         extern Tac_StepMotor Step_Motor_Y;
-                        void TIMER_0_INST_IRQHandler(void)                      // 选择使用的定时器  
+                        void TIMER_0_INST_IRQHandler(void)                      // 选择使用的定时器
                         {
                             switch (DL_TimerA_getPendingInterrupt(TIMER_0_INST))
                             {
@@ -47,11 +47,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-//脉冲发生器相关变量定义
-//extern unsigned char SQW_Generator_En;  // 脉冲输出使能
-//extern uint32_t tick_count;        // 脉冲个数计数
-
-
 
 // 引入TI G3507的头文件
 #ifdef __MSPM0G3507__
@@ -59,7 +54,7 @@
 #include "ti/driverlib/m0p/dl_interrupt.h"
 #include "ti_msp_dl_config.h"
 
-//TI G3507的时钟以及定时器配置结构体
+// TI G3507的时钟以及定时器配置结构体
 typedef struct
 {
     DL_TIMER_CLOCK clockSel;
@@ -86,16 +81,16 @@ typedef struct
     GPIO_Regs *SQW_Port;
 
     // 步进电机运动状态设置
-    uint32_t Steps_remain;                   // 电机需要运动的步数
-    uint8_t Microsteps;                 // 细分
-    unsigned char Dir;                  // 方向,T为顺时针，F为逆时针(从电机运动轴的上面看)
-    unsigned char Lock;                 // 锁定状态，T为锁定，F为未锁定
+    uint32_t Steps_remain; // 电机需要运动的步数
+    uint8_t Microsteps;    // 细分
+    unsigned char Dir;     // 方向,T为顺时针，F为逆时针(从电机运动轴的上面看)
+    unsigned char Lock;    // 锁定状态，T为锁定，F为未锁定
 
     DL_Tac_StepMotor_TimerConfig *timer_config; // 定时器配置结构体
-    uint16_t Freq;                      // 脉冲频率(Hz)
-    unsigned char SQW_Generator_En;     // 脉冲输出使能
-    uint32_t ticks;                     // 定时器时刻，用以计算脉冲周期
-    uint32_t SQW_tick_target;           // 脉冲周期目标值
+    uint16_t Freq;                              // 脉冲频率(Hz)
+    unsigned char SQW_Generator_En;             // 脉冲输出使能
+    uint32_t ticks;                             // 定时器时刻，用以计算脉冲周期
+    uint32_t SQW_tick_target;                   // 脉冲周期目标值
 } Tac_StepMotor;
 
 // 初始化函数
@@ -110,14 +105,12 @@ void Tac_StepMotor_Init(Tac_StepMotor *motor_struct, DL_Tac_StepMotor_TimerConfi
 // 引入STM32 HAL的头文件
 #ifdef USE_HAL_DRIVER
 #include "main.h"
-#include "stm32f1xx_hal.h"
-#include "stm32f1xx_hal_tim.h"
 
 // 步进电机参数定义
 typedef struct
 {
     // 步进电机引脚定义
-    uint16_t DirPin;    
+    uint16_t DirPin;
     GPIO_TypeDef *DirPort;
     uint16_t StepPin;
     GPIO_TypeDef *StepPort;
@@ -131,30 +124,28 @@ typedef struct
     GPIO_TypeDef *SQW_Port;
 
     // 步进电机运动状态设置
-    uint32_t Steps_remain;                   // 电机需要运动的步数
-    uint8_t Microsteps;                 // 细分
-    unsigned char Dir;                  // 方向,T为顺时针，F为逆时针(从电机运动轴的上面看)
-    unsigned char Lock;                 // 锁定状态，T为锁定，F为未锁定
+    uint32_t Steps_remain; // 电机需要运动的步数
+    uint8_t Microsteps;    // 细分
+    unsigned char Dir;     // 方向,T为顺时针，F为逆时针(从电机运动轴的上面看)
+    unsigned char Lock;    // 锁定状态，T为锁定，F为未锁定
 
-    TIM_HandleTypeDef *htim;            // 定时器句柄
-    uint16_t Freq;                      // 脉冲频率(Hz)
-    unsigned char SQW_Generator_En;     // 脉冲输出使能
-    uint32_t ticks;                     // 定时器时刻，用以计算脉冲周期
-    uint32_t SQW_tick_target;           // 脉冲周期目标值
+    TIM_HandleTypeDef *htim;        // 定时器句柄
+    uint16_t Freq;                  // 脉冲频率(Hz)
+    unsigned char SQW_Generator_En; // 脉冲输出使能
+    uint32_t ticks;                 // 定时器时刻，用以计算脉冲周期
+    uint32_t SQW_tick_target;       // 脉冲周期目标值
 
 } Tac_StepMotor;
 
 // 初始化函数
 void Tac_StepMotor_Init(Tac_StepMotor *motor_struct, TIM_HandleTypeDef *htim,
-                        GPIO_TypeDef *dir_port, uint16_t dir_pin, 
-                        GPIO_TypeDef *microstep_port_A, uint16_t microstep_pin_A, 
-                        GPIO_TypeDef *microstep_port_B, uint16_t microstep_pin_B, 
+                        GPIO_TypeDef *dir_port, uint16_t dir_pin,
+                        GPIO_TypeDef *microstep_port_A, uint16_t microstep_pin_A,
+                        GPIO_TypeDef *microstep_port_B, uint16_t microstep_pin_B,
                         GPIO_TypeDef *lock_port, uint16_t lock_pin,
                         GPIO_TypeDef *SQW_port, uint16_t SQW_pin);
 
-
 #endif
-
 
 void set_Motor_Dir(Tac_StepMotor *motor_struct, unsigned char dir);
 void set_Microsteps(Tac_StepMotor *motor_struct, uint8_t microsteps);

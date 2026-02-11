@@ -32,8 +32,7 @@ void Tac_StepMotor_Init(Tac_StepMotor *motor_struct, TIM_HandleTypeDef *htim,
                         GPIO_TypeDef *microstep_port_A, uint16_t microstep_pin_A, 
                         GPIO_TypeDef *microstep_port_B, uint16_t microstep_pin_B, 
                         GPIO_TypeDef *lock_port, uint16_t lock_pin, 
-                        GPIO_TypeDef *SQW_port, 
-                        uint16_t SQW_pin) 
+                        GPIO_TypeDef *SQW_port, uint16_t SQW_pin) 
 {   
     motor_struct->htim = htim;  
     motor_struct->DirPort = dir_port;     
@@ -325,45 +324,42 @@ float Get_TIM_Update_Freq(Tac_StepMotor *motor_struct)
     return period;
 }
 
-
 /// @brief 根据目标频率自动计算所需要的tick数量
 /// @param htim 定时器句柄
-/// @param motor_struct 所需要控制电机的配置结构体 
+/// @param motor_struct 所需要控制电机的配置结构体
 /// @param freq_out 输出的频率
-void SQW_Set_Frequency(Tac_StepMotor *motor_struct , float freq_out)
+void SQW_Set_Frequency(Tac_StepMotor *motor_struct, float freq_out)
 {
     float f_int = Get_TIM_Update_Freq(motor_struct);
 
     motor_struct->SQW_tick_target = (uint32_t)(freq_out / f_int);
 
     if (motor_struct->SQW_tick_target < 1)
-        motor_struct->SQW_tick_target = 1;   // 防止除零
-        
+        motor_struct->SQW_tick_target = 1; // 防止除零
 }
 
 /// @brief 计算方波输出的函数，需要将该函数放入中断回调中去
 /// @param motor_struct 所需要控制电机的配置结构体
 void SQW_Gen(Tac_StepMotor *motor_struct)
 {
-    if(motor_struct->SQW_Generator_En == '1')
+    if (motor_struct->SQW_Generator_En == '1')
     {
         motor_struct->ticks++;
         if (motor_struct->ticks >= motor_struct->SQW_tick_target)
         {
-            DL_GPIO_writePins(motor_struct->SQW_Port, motor_struct->SQW_Pin); //HAL_GPIO_WritePin(motor_struct->SQW_Port, motor_struct->SQW_Pin, GPIO_PIN_SET); // 输出方波
+            DL_GPIO_writePins(motor_struct->SQW_Port, motor_struct->SQW_Pin); // 输出方波
             motor_struct->Steps_remain--;
             motor_struct->ticks = 0;
         }
-        else if (motor_struct->Steps_remain <= ((uint8_t)1))  //留出多余步数，防止溢出，原本应该为0
+        else if (motor_struct->Steps_remain <= ((uint8_t)1)) // 留出多余步数，防止溢出，原本应该为0
         {
             SQW_Gen_Stop(motor_struct);
         }
         else
-            DL_GPIO_clearPins(motor_struct->SQW_Port, motor_struct->SQW_Pin); //HAL_GPIO_WritePin(motor_struct->SQW_Port, motor_struct->SQW_Pin,GPIO_PIN_RESET);
+            DL_GPIO_clearPins(motor_struct->SQW_Port, motor_struct->SQW_Pin);
     }
 }
 #endif
-
 
 #ifdef USE_HAL_DRIVER
 /// @brief 获取当前定时器APB值，用以计算周期等
