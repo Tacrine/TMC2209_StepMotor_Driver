@@ -1,13 +1,13 @@
 // 作者：Tacrine_F
-// 时间：26年2月
-// 版本：V0.1alpha 只通过编译，等待实际测试
+// 时间：26年3月
+// 版本：V0.2alpha 只通过编译，等待实际测试
 /*
 说明：
     跨平台：本驱动程序使用TMC2209驱动芯片以驱动42步进电机,支持跨平台调用，STM32 HAL和MSP430 G3507平台。
     使用需要设置编译器预定义宏:
     一般来说工程生成完毕时，会有预定义宏，如果没有，请手动添加
         __MSPM0G3507__ 或者 USE_HAL_DRIVER
-    脉冲发生：本驱动有多个实现脉冲的方式，用户可以根据自己的需求选择。目前只支持_TMC_GPIO_模式，_TMC_TIMER_模式还未实现。
+    脉冲发生：本驱动有多个实现脉冲的方式，用户可以根据自己的需求选择。目前只支持_TMC_GPIO_模式，_TMC_TIMER_模式还仅支持TI MSPM0G3507平台。
     使用需要设置编译器预定义宏: _TMC_GPIO_ 或者 _TMC_TIMER_
         _TMC_GPIO_模式：使用定时器中断来翻转引脚电平，需要在中断函数中调用，只适合与约1KHz左右的速度，高速会频繁进入中断，打乱MCU运行周期。
         下文是示例。
@@ -38,8 +38,26 @@
                             }
                         }
 
-        _TMC_TIMER_模式：直接使用定时器来产生脉冲，STM32需要配置主从定时器。
-*/
+        _TMC_TIMER_模式：直接使用定时器来产生脉冲，STM32需要配置主从定时器，MSPM0G3507需要配置事件与中断。
+        详细见工程内的示例工程。
+        TI G3507的中断回调函数:
+                    void CAPTURE_INST_IRQHandler(void)     //捕获定时器中断回调函数，用以统计脉冲数量，实现PCNT。
+                    {
+                        switch (DL_TimerG_getPendingInterrupt(CAPTURE_INST))       // 捕获定时器中断
+                        {
+                            case DL_TIMG_IIDX_CAPTURE:
+                                if (&motor_struct_X.SQW_Generator_En == '1')
+                                {
+                                    &motor_struct_X.Steps_remain --;
+                                    if(&motor_struct_X.Steps_remain <= 0)
+                                    {
+                                        DL_TimerA_stopCounter(PWM_INST);    // 停止PWM输出
+                                        SQW_Gen_Stop(&motor_struct_X);
+                                    }
+                                }
+                        }
+                    }
+*/      
 
 #ifndef _Tac_TMC2209_StepMotor_Driver_h_
 #define _Tac_TMC2209_StepMotor_Driver_h_
@@ -55,6 +73,7 @@
 #include "ti_msp_dl_config.h"
 
 // TI G3507的时钟以及定时器配置结构体
+#ifdef _TMC_GPIO_
 typedef struct
 {
     DL_TIMER_CLOCK clockSel;
@@ -62,7 +81,20 @@ typedef struct
     uint8_t prescale;
     uint32_t period;
 } DL_Tac_StepMotor_TimerConfig;
+#endif
+#ifdef _TMC_TIMER_
+typedef struct
+{
+    // TIM_INST
+    GPTIMER_Regs *DL_TimerA_PWM_gptimer;   
+    GPTIMER_Regs *DL_TimerG_Capture_gptimer;
 
+    DL_TimerA_ClockConfig *clockConfig;
+    DL_TimerA_PWMConfig *pwmConfig;
+    DL_TimerG_ClockConfig *captureClockConfig;
+    DL_TimerG_CaptureTriggerConfig *captureConfig;
+} DL_Tac_StepMotor_TimerConfig;
+#endif
 // 步进电机参数定义
 typedef struct
 {
@@ -86,7 +118,12 @@ typedef struct
     unsigned char Dir;     // 方向,T为顺时针，F为逆时针(从电机运动轴的上面看)
     unsigned char Lock;    // 锁定状态，T为锁定，F为未锁定
 
+    #ifdef _TMC_GPIO_
     DL_Tac_StepMotor_TimerConfig *timer_config; // 定时器配置结构体
+    #endif
+    #ifdef _TMC_TIMER_
+    DL_Tac_StepMotor_TimerConfig *timer_config;
+    #endif
     uint16_t Freq;                              // 脉冲频率(Hz)
     unsigned char SQW_Generator_En;             // 脉冲输出使能
     uint32_t ticks;                             // 定时器时刻，用以计算脉冲周期

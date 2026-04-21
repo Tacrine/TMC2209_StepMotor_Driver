@@ -10,6 +10,7 @@ void Tac_StepMotor_Init(Tac_StepMotor *motor_struct, DL_Tac_StepMotor_TimerConfi
                         GPIO_Regs *LockPort, uint32_t LockPin,
                         GPIO_Regs *SQW_Port, uint32_t SQW_Pin)
 {
+    motor_struct->timer_config = timer_config;
     motor_struct->DirPort = DirPort;
     motor_struct->DirPin = DirPin;
     motor_struct->MicrostepPort_A = MicrostepPort_A;
@@ -25,6 +26,7 @@ void Tac_StepMotor_Init(Tac_StepMotor *motor_struct, DL_Tac_StepMotor_TimerConfi
     motor_struct->SQW_tick_target = 0;
 }
 #endif
+
 #ifdef USE_HAL_DRIVER
 // 这里的GPIO_TypeDef * 是HAL库中的类型
 void Tac_StepMotor_Init(Tac_StepMotor *motor_struct, TIM_HandleTypeDef *htim,
@@ -291,13 +293,13 @@ void enable_PWM(Tac_StepMotor *motor_struct, uint32_t freq)
     motor_struct->ticks = 0;
     SQW_Set_Frequency(motor_struct, freq);
     motor_struct->SQW_Generator_En = '1';
-    while(motor_struct->Steps_remain > 1)     // 循环到步数耗尽，多留一步防止数据溢出
+    while(motor_struct->Steps_remain >= 0)     // 循环到步数耗尽
     {}
     SQW_Gen_Stop(motor_struct);
 }
 
 
-/*以下内容为脉冲发生器部分*/
+/*==========以下内容为脉冲发生器部分==========*/
 
 
 /// @brief 停止脉冲信号
@@ -309,12 +311,7 @@ void SQW_Gen_Stop(Tac_StepMotor *motor_struct)
 
 
 #ifdef __MSPM0G3507__
-uint32_t Get_Config_Clock(Tac_StepMotor *motor_struct)
-{
-    uint32_t DL_TIMER_CLOCK_BUSCLK = motor_struct->timer_config->clockSel;
-    return DL_TIMER_CLOCK_BUSCLK;
-}
-
+#ifdef _TMC_GPIO_
 // 计算中断频率
 float Get_TIM_Update_Freq(Tac_StepMotor *motor_struct) 
 {
@@ -322,20 +319,6 @@ float Get_TIM_Update_Freq(Tac_StepMotor *motor_struct)
     //uint32_t DL_Timer_LoadValue = DL_TimerA_getLoadValue(gptimer);
     uint32_t period = motor_struct->timer_config->period;
     return period;
-}
-
-/// @brief 根据目标频率自动计算所需要的tick数量
-/// @param htim 定时器句柄
-/// @param motor_struct 所需要控制电机的配置结构体
-/// @param freq_out 输出的频率
-void SQW_Set_Frequency(Tac_StepMotor *motor_struct, float freq_out)
-{
-    float f_int = Get_TIM_Update_Freq(motor_struct);
-
-    motor_struct->SQW_tick_target = (uint32_t)(freq_out / f_int);
-
-    if (motor_struct->SQW_tick_target < 1)
-        motor_struct->SQW_tick_target = 1; // 防止除零
 }
 
 /// @brief 计算方波输出的函数，需要将该函数放入中断回调中去
@@ -359,6 +342,68 @@ void SQW_Gen(Tac_StepMotor *motor_struct)
             DL_GPIO_clearPins(motor_struct->SQW_Port, motor_struct->SQW_Pin);
     }
 }
+#endif
+
+#ifdef _TMC_TIMER_
+/// @brief 获取PWM时钟频率
+/// @param motor_struct 所需要控制电机的配置结构体
+/// @return PWM时钟频率
+uint32_t Get_PWM_Clock(Tac_StepMotor *motor_struct)
+{
+    DL_TimerA_getClockConfig(motor_struct->timer_config->DL_TimerA_PWM_gptimer, motor_struct->timer_config->clockConfig);
+    
+    uint32_t baseClk = CPUCLK_FREQ; // 获取CPU时钟频率
+    uint32_t divider = 1;
+    switch(motor_struct->timer_config->clockConfig->divideRatio)    // 获取时钟分频
+    {
+        case DL_TIMER_CLOCK_DIVIDE_1: divider = 1; break;
+        case DL_TIMER_CLOCK_DIVIDE_2: divider = 2; break;
+        case DL_TIMER_CLOCK_DIVIDE_3: divider = 3; break;
+        case DL_TIMER_CLOCK_DIVIDE_4: divider = 4; break;
+        case DL_TIMER_CLOCK_DIVIDE_5: divider = 5; break;
+        case DL_TIMER_CLOCK_DIVIDE_6: divider = 6; break;
+        case DL_TIMER_CLOCK_DIVIDE_7: divider = 7; break;
+        case DL_TIMER_CLOCK_DIVIDE_8: divider = 8; break;
+
+        default: divider = 1; break;
+    }
+    uint32_t prescale = motor_struct->timer_config->clockConfig->prescale + 1;  // 获取预分频
+    
+    uint32_t PWM_Clock_Freq = baseClk / divider / prescale;  // 计算PWM时钟频率
+
+    return PWM_Clock_Freq;
+}
+
+/// @brief 根据目标频率自动计算所需要的tick数量
+/// @param htim 定时器句柄
+/// @param motor_struct 所需要控制电机的配置结构体
+/// @param freq_out 输出的频率
+void SQW_Set_Frequency(Tac_StepMotor *motor_struct, float freq_out)
+{
+    #ifdef _TMC_GPIO_
+    float f_int = Get_TIM_Update_Freq(motor_struct);
+
+    motor_struct->SQW_tick_target = (uint32_t)(freq_out / f_int);
+
+    if (motor_struct->SQW_tick_target < 1)
+        motor_struct->SQW_tick_target = 1; // 防止除零
+    #endif
+
+    #ifdef _TMC_TIMER_
+
+    DL_TimerG_startCounter(motor_struct->timer_config->DL_TimerG_Capture_gptimer);
+    if(freq_out > 0)
+    {
+        motor_struct->Freq = Get_PWM_Clock(motor_struct) / freq_out / 2;     // 计算目标频率，SYSCONFIG中配置PWM定时器PWM模式为中心对齐
+        DL_TimerA_stopCounter(motor_struct->timer_config->DL_TimerA_PWM_gptimer);
+        DL_TimerA_setLoadValue(motor_struct->timer_config->DL_TimerA_PWM_gptimer, motor_struct->SQW_tick_target);
+        DL_TimerA_setCaptureCompareValue(motor_struct->timer_config->DL_TimerA_PWM_gptimer, motor_struct->SQW_tick_target, DL_TIMER_CC_0_INDEX);  // 设置捕获比较值，触发模式；固定占空比为50%，
+        DL_TimerA_startCounter(motor_struct->timer_config->DL_TimerA_PWM_gptimer);
+    }
+
+    #endif
+}
+#endif
 #endif
 
 #ifdef USE_HAL_DRIVER
